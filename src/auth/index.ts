@@ -57,11 +57,13 @@ export default function createShopifyAuth(options: OAuthStartOptions) {
   return async function shopifyAuth(ctx: Context, next: NextFunction) {
     ctx.cookies.secure = true;
 
+    console.log(ctx)
     if (
       ctx.path === oAuthStartPath &&
       !hasCookieAccess(ctx) &&
       !grantedStorageAccess(ctx)
     ) {
+      console.log('requestStorageAccess')
       await requestStorageAccess(ctx);
       return;
     }
@@ -75,6 +77,7 @@ export default function createShopifyAuth(options: OAuthStartOptions) {
         ctx.throw(400);
       }
 
+      console.log('TOP_LEVEL_OAUTH_COOKIE_NAME')
       ctx.cookies.set(TOP_LEVEL_OAUTH_COOKIE_NAME, '', getCookieOptions(ctx));
       const redirectUrl = await Shopify.Auth.beginAuth(
         ctx.req,
@@ -83,19 +86,22 @@ export default function createShopifyAuth(options: OAuthStartOptions) {
         oAuthCallbackPath,
         config.accessMode === 'online'
       );
+      console.log('redirectUrl', redirectUrl)
       ctx.redirect(redirectUrl);
       return;
     }
 
     if (ctx.path === oAuthStartPath) {
+      console.log('topLevelOAuthRedirect')
       await topLevelOAuthRedirect(ctx);
       return;
     }
 
     if (ctx.path === oAuthCallbackPath) {
       try {
+        console.log('validateAuthCallback')
         await Shopify.Auth.validateAuthCallback(ctx.req, ctx.res, ctx.query);
-
+        console.log('loadCurrentSession')
         ctx.state.shopify = await Shopify.Utils.loadCurrentSession(ctx.req, ctx.res, config.accessMode === 'online');
 
         if (config.afterAuth) {
@@ -103,12 +109,15 @@ export default function createShopifyAuth(options: OAuthStartOptions) {
         }
       }
       catch (e) {
+        console.log('Error loadCurrentSession', e)
         switch (true) {
           case (e instanceof Shopify.Errors.InvalidOAuthError):
             ctx.throw(400, e.message);
             break;
           case (e instanceof Shopify.Errors.CookieNotFound):
           case (e instanceof Shopify.Errors.SessionNotFound):
+            console.log('e instanceof Shopify.Errors.SessionNotFound')
+            console.log(e)
             // This is likely because the OAuth session cookie expired before the merchant approved the request
             ctx.redirect(`${oAuthStartPath}?shop=${ctx.query.shop}`);
             break;
@@ -121,6 +130,7 @@ export default function createShopifyAuth(options: OAuthStartOptions) {
     }
 
     if (ctx.path === enableCookiesPath) {
+      console.log('enableCookies')
       await enableCookies(ctx);
       return;
     }
